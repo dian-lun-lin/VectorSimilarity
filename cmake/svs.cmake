@@ -37,7 +37,6 @@ if(USE_SVS)
     message(STATUS "SVS support enabled")
     # Configure SVS build
     add_compile_definitions("HAVE_SVS=1")
-    set(svs_factory_file "index_factories/svs_factory.cpp")
 
     cmake_dependent_option(SVS_SHARED_LIB "Use SVS pre-compiled shared library" ON "USE_SVS" OFF)
     set(SVS_URL "https://github.com/intel/ScalableVectorSearch/releases/download/v0.0.8-dev/svs-shared-library-0.0.8-NIGHTLY-20250423.tar.gz" CACHE STRING "SVS URL")
