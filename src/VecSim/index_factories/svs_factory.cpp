@@ -37,11 +37,13 @@ VecSimIndex *NewIndexImpl(const VecSimParams *params, bool is_normalized) {
 
 template <typename MetricType, typename DataType>
 VecSimIndex *NewIndexImpl(const VecSimParams *params, bool is_normalized) {
-    if (!svs_details::isSVSLVQModeSupported(params->algoParams.svsParams.quantBits)) {
+    const auto &[quantBits, supported] =
+        svs_details::isSVSQuantBitsSupported(params->algoParams.svsParams.quantBits);
+    if (!supported) {
         return NULL;
     }
 
-    switch (params->algoParams.svsParams.quantBits) {
+    switch (quantBits) {
     case VecSimSvsQuant_NONE:
         return NewIndexImpl<MetricType, DataType, 0>(params, is_normalized);
     case VecSimSvsQuant_8:
@@ -97,7 +99,12 @@ constexpr size_t QuantizedVectorSize(size_t dims, size_t alignment = 0) {
 
 template <typename DataType>
 size_t QuantizedVectorSize(VecSimSvsQuantBits quant_bits, size_t dims, size_t alignment = 0) {
-    switch (quant_bits) {
+    const auto &[quantBits, supported] = svs_details::isSVSQuantBitsSupported(quant_bits);
+    if (!supported) {
+        return 0;
+    }
+
+    switch (quantBits) {
     case VecSimSvsQuant_NONE:
         return QuantizedVectorSize<DataType, 0>(dims, alignment);
     case VecSimSvsQuant_8:
