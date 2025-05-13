@@ -249,6 +249,34 @@ TYPED_TEST(HNSWTieredIndexTest, testSizeEstimation) {
     ASSERT_LE(estimation, actual * 1.01);
 }
 
+TYPED_TEST(HNSWTieredIndexTest, testSizeEstimationWrongAlgo) {
+    size_t dim = 128;
+    size_t n = DEFAULT_BLOCK_SIZE;
+    size_t M = 32;
+    size_t bs = DEFAULT_BLOCK_SIZE;
+    bool isMulti = TypeParam::isMulti();
+
+    BFParams bf_params = {.type = TypeParam::get_index_type(),
+                          .dim = dim,
+                          .metric = VecSimMetric_Cosine,
+                          .multi = isMulti,
+                          .initialCapacity = n,
+                          .blockSize = bs};
+    VecSimParams vecsim_bf_params = CreateParams(bf_params);
+
+    // auto mock_thread_pool = tieredIndexMock();
+    TieredIndexParams tiered_params = {.jobQueue = NULL,
+                                       .jobQueueCtx = NULL,
+                                       .submitCb = NULL,
+                                       .flatBufferLimit = SIZE_MAX,
+                                       .primaryIndexParams = &vecsim_bf_params};
+    VecSimParams params = CreateParams(tiered_params);
+
+    size_t initial_size_estimation = VecSimIndex_EstimateInitialSize(&params);
+
+    ASSERT_EQ(initial_size_estimation, 0);
+}
+
 TYPED_TEST(HNSWTieredIndexTest, addVector) {
     // Create TieredHNSW index instance with a mock queue.
     size_t dim = 4;
