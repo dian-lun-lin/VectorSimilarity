@@ -10,7 +10,9 @@
 #include "gtest/gtest.h"
 #include "VecSim/vec_sim.h"
 #include "unit_test_utils.h"
+#include <array>
 #include <cmath>
+#include <vector>
 
 #if HAVE_SVS
 #include "VecSim/algorithms/svs/svs.h"
@@ -187,9 +189,9 @@ TYPED_TEST(SVSTest, svs_bulk_vectors_add_delete_test) {
 
     auto svs_index = this->CastToSVS(index); // CAST_TO_SVS(index, svs::distance::DistanceL2);
 
-    std::vector<TEST_DATA_T[dim]> v(n);
+    std::vector<std::array<TEST_DATA_T, dim>> v(n);
     for (size_t i = 0; i < n; i++) {
-        GenerateVector<TEST_DATA_T>(v[i], dim, i);
+        GenerateVector<TEST_DATA_T>(v[i].data(), dim, i);
     }
 
     std::vector<size_t> ids(n);
@@ -1408,7 +1410,7 @@ TYPED_TEST(SVSTest, svs_vector_search_test_cosine) {
     ASSERT_INDEX(index);
 
     // To meet accurary in LVQ case we have to add bulk of vectors at once.
-    std::vector<TEST_DATA_T[dim]> v(n);
+    std::vector<std::array<TEST_DATA_T, dim>> v(n);
     for (size_t i = 1; i <= n; i++) {
         auto &f = v[i - 1];
         f[0] = (TEST_DATA_T)i / n;
@@ -1775,7 +1777,7 @@ TYPED_TEST(SVSTest, rangeQueryCosine) {
     ASSERT_INDEX(index);
 
     // To meet accurary in LVQ case we have to add bulk of vectors at once.
-    std::vector<TEST_DATA_T[dim]> v(n);
+    std::vector<std::array<TEST_DATA_T, dim>> v(n);
     std::vector<size_t> ids(n);
 
     for (size_t i = 0; i < n; i++) {
