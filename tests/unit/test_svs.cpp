@@ -36,9 +36,7 @@ public:
 protected:
     VecSimIndex *CreateNewIndex(SVSParams &params) {
         params.quantBits = index_type_t::get_quant_bits();
-        params.type = index_type_t::get_index_type();
-        VecSimParams index_params = CreateParams(params);
-        return VecSimIndex_New(&index_params);
+        return test_utils::CreateNewIndex(params, index_type_t::get_index_type(), false);
     }
 
     SVSIndexBase *CastToSVS(VecSimIndex *index) {

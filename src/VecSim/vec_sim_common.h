@@ -143,6 +143,7 @@ typedef enum {
 typedef struct {
     VecSimType type;     // Datatype to index.
     size_t dim;          // Vector's dimension.
+    bool multi;          // Determines if the index should multi-index or not.
     VecSimMetric metric; // Distance metric to use in the index.
     size_t blockSize;
 

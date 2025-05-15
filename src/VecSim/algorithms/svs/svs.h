@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "svs/index/vamana/dynamic_index.h"
+#include "svs/index/vamana/multi.h"
 
 #include "VecSim/algorithms/svs/svs_utils.h"
 #include "VecSim/algorithms/svs/svs_batch_iterator.h"
@@ -30,7 +31,7 @@ struct SVSIndexBase {
     virtual int deleteVectors(const labelType *labels, size_t n) = 0;
 };
 
-template <typename MetricType, typename DataType, size_t QuantBits, size_t ResidualBits = 0>
+template <typename MetricType, typename DataType, size_t QuantBits, size_t ResidualBits = 0, bool IsMulti = false>
 class SVSIndex : public VecSimIndexAbstract<svs_details::vecsim_dt<DataType>, float>,
                  public SVSIndexBase {
 protected:
@@ -45,8 +46,9 @@ protected:
     using graph_builder_t = SVSGraphBuilder<uint32_t>;
     using graph_type = typename graph_builder_t::graph_type;
 
-    using impl_type =
-        svs::index::vamana::MutableVamanaIndex<graph_type, index_storage_type, distance_f>;
+    using impl_type = typename std::conditional<IsMulti,
+                                                svs::index::vamana::MultiMutableVamanaIndex<graph_type, index_storage_type, distance_f>,
+                                                svs::index::vamana::MutableVamanaIndex<graph_type, index_storage_type, distance_f>>::type;
 
     bool forcePreprocessing;
 
@@ -176,9 +178,12 @@ protected:
             return 0;
         }
 
-        // SVS index does not support adding vectors with the same label
-        // so we have to delete them first
-        const auto deleted_num = deleteVectorsImpl(labels, n);
+        size_t deleted_num = 0;
+        if constexpr (!IsMulti) {
+            // SVS single index does not support adding vectors with the same label
+            // so we have to delete them first
+            deleted_num = deleteVectorsImpl(labels, n);
+        }
 
         std::span<const labelType> ids(labels, n);
         auto processed_blob = this->preprocessForBatchStorage(vectors_data, n);
@@ -215,9 +220,9 @@ protected:
             return 0;
         }
 
-        impl_->delete_entries(entries_to_delete);
-        this->markIndexUpdate(entries_to_delete.size());
-        return entries_to_delete.size();
+        size_t num_deleted = impl_->delete_entries(entries_to_delete);
+        this->markIndexUpdate(num_deleted);
+        return num_deleted;
     }
 
     // Count severe index changes (currently deletions only) and consolidate index if needed
@@ -228,6 +233,7 @@ protected:
         // SVS index instance should not be empty
         if (indexSize() == 0) {
             this->impl_.reset();
+
             changes_num = 0;
             return;
         }
@@ -259,7 +265,14 @@ public:
         return impl_ ? storage_traits_t::storage_capacity(impl_->view_data()) : 0;
     }
 
-    size_t indexLabelCount() const override { return indexSize(); }
+    size_t indexLabelCount() const override {
+        if constexpr (IsMulti) {
+            return impl_ ? impl_->labelcount() : 0;
+        }
+        else {
+            return indexSize();
+        }
+    }
 
     VecSimIndexBasicInfo basicInfo() const override {
         VecSimIndexBasicInfo info = this->getBasicInfo();
@@ -315,18 +328,9 @@ public:
             return std::numeric_limits<double>::quiet_NaN();
         };
 
-        // SVS distance function wrapper to cover LVQ/LeanVec cases
-        auto dist_f = svs::index::vamana::extensions::single_search_setup(
-            impl_->view_data(), impl_->distance_function());
-
         auto query_datum = std::span{static_cast<const DataType *>(vector_data), this->dim};
 
-        // SVS distance function may require to fix/pre-process one of arguments
-        svs::distance::maybe_fix_argument(dist_f, query_datum);
-
-        auto my_datum = impl_->get_datum(label);
-        auto dist = svs::distance::compute(dist_f, query_datum, my_datum);
-        return toVecSimDistance(dist);
+        return toVecSimDistance(impl_->get_distance(label, query_datum));
     }
 
     VecSimQueryReply *topKQuery(const void *queryBlob, size_t k,
@@ -337,8 +341,9 @@ public:
             return rep;
         }
 
-        // limit result size to index size
-        k = std::min(k, this->indexSize());
+        // In single-vector mode, limit result size to index size
+        // In multi-vector mode, limit result size to label count
+        k = std::min(k, this->indexLabelCount());
 
         auto processed_query_ptr = this->preprocessQuery(queryBlob);
         const void *processed_query = processed_query_ptr.get();
@@ -393,7 +398,7 @@ public:
 
         // Create SVS BatchIterator for range search
         // Search result is cached in the iterator and can be accessed by the user
-        svs::index::vamana::BatchIterator<impl_type, data_type> svs_it{*impl_, query};
+        auto svs_it = impl_->make_batch_iterator(query);
         svs_it.next(batch_size, cancel);
         if (cancel()) {
             rep->code = VecSim_QueryReply_TimedOut;
@@ -444,7 +449,7 @@ public:
             return new (this->getAllocator())
                 NullSVS_BatchIterator(queryBlobCopyPtr, queryParams, this->getAllocator());
         } else {
-            return new (this->getAllocator()) SVS_BatchIterator<impl_type, data_type>(
+            return new (this->getAllocator()) SVS_BatchIterator<impl_type, data_type, IsMulti>(
                 queryBlobCopyPtr, impl_.get(), queryParams, this->getAllocator());
         }
     }

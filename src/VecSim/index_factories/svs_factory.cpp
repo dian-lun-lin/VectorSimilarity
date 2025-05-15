@@ -18,6 +18,7 @@
 namespace SVSFactory {
 
 namespace {
+
 AbstractIndexInitParams NewAbstractInitParams(const VecSimParams *params) {
     auto &svsParams = params->algoParams.svsParams;
     size_t dataSize = VecSimParams_GetDataSize(svsParams.type, svsParams.dim, svsParams.metric);
@@ -27,7 +28,7 @@ AbstractIndexInitParams NewAbstractInitParams(const VecSimParams *params) {
             .dataSize = dataSize,
             .metric = svsParams.metric,
             .blockSize = svsParams.blockSize,
-            .multi = false,
+            .multi = svsParams.multi,
             .logCtx = params->logCtx};
 }
 
@@ -39,9 +40,14 @@ VecSimIndex *NewIndexImpl(const VecSimParams *params, bool is_normalized) {
     auto components = CreateIndexComponents<svs_details::vecsim_dt<DataType>, float>(
         abstractInitParams.allocator, svsParams.metric, svsParams.dim, is_normalized);
     bool forcePreprocessing = !is_normalized && svsParams.metric == VecSimMetric_Cosine;
-    return new (abstractInitParams.allocator)
-        SVSIndex<MetricType, DataType, QuantBits, ResidualBits>(svsParams, abstractInitParams,
-                                                                components, forcePreprocessing);
+
+    // check if single and return new svs_index
+    if (svsParams.multi)
+        return new (abstractInitParams.allocator)
+            SVSIndex<MetricType, DataType, QuantBits, ResidualBits, true>(svsParams, abstractInitParams, components, forcePreprocessing);
+    else
+        return new (abstractInitParams.allocator)
+            SVSIndex<MetricType, DataType, QuantBits, ResidualBits, false>(svsParams, abstractInitParams, components, forcePreprocessing);
 }
 
 template <typename MetricType, typename DataType>

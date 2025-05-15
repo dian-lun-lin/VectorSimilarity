@@ -16,13 +16,17 @@
 #include <memory>
 
 #include "svs/index/vamana/iterator.h"
+#include "svs/index/vamana/multi.h"
 
 #include "VecSim/algorithms/svs/svs_utils.h"
 
-template <typename Index, typename DataType>
+template <typename Index, typename DataType, bool IsMulti = false>
 class SVS_BatchIterator : public VecSimBatchIterator {
 private:
-    using impl_type = svs::index::vamana::BatchIterator<Index, DataType>;
+    using impl_type = typename std::conditional<IsMulti,
+                                                svs::index::vamana::MultiBatchIterator<Index, DataType>,
+                                                svs::index::vamana::BatchIterator<Index, DataType>>::type;
+
     using dist_type = typename Index::distance_type;
     size_t dim;
     impl_type impl_;
