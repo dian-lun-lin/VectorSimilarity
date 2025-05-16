@@ -251,24 +251,41 @@ class TieredSVSIndex : public VecSimTieredIndex<DataType, float> {
         vecsim_stl::unordered_set<labelType> returned_results_set;
 
     private:
+        template <bool isMulti>
         VecSimQueryReply *compute_current_batch(size_t n_res) {
             // Merge results
             // This call will update `svs_res` and `bf_res` to point to the end of the merged
             // results. results.
             auto batch_res = new VecSimQueryReply(allocator);
-            auto [from_svs, from_flat] =
-                merge_results<false>(batch_res->results, svs_results, flat_results, n_res);
 
-            // We're on a single-value index, update the set of results returned from the FLAT index
-            // before popping them, to prevent them to be returned from the SVS index in later
-            // batches. batches.
-            for (size_t i = 0; i < from_flat; ++i) {
-                returned_results_set.insert(flat_results[i].id);
+            p = merge_results<isMulti>(batch_res->results, svs_results, flat_results, n_res);
+
+            auto [from_hnsw, from_flat] = p;
+
+            if constexpr (!isMulti) {
+                // If we're on a single-value index, update the set of results returned from the FLAT index
+                // before popping them, to prevent them to be returned from the SVS index in later batches.
+                for (size_t i = 0; i < from_flat; ++i) {
+                    this->returned_results_set.insert(flat_results[i].id);
+                }
+            } else {
+                // If we're on a multi-value index, update the set of results returned (from `batch_res`)
+                for (size_t i = 0; i < batch_res->results.size(); ++i) {
+                    this->returned_results_set.insert(batch_res->results[i].id);
+                }
             }
 
             // Update results
             flat_results.erase(flat_results.begin(), flat_results.begin() + from_flat);
             svs_results.erase(svs_results.begin(), svs_results.begin() + from_svs);
+
+            // clean up the results
+            // On multi-value indexes, one (or both) results lists may contain results that are already
+            // returned form the other list (with a different score). We need to filter them out.
+            if constexpr (isMulti) {
+                filter_irrelevant_results(this->flat_results);
+                filter_irrelevant_results(this->svs_results);
+            }
 
             // Return current batch
             return batch_res;
@@ -336,6 +353,7 @@ class TieredSVSIndex : public VecSimTieredIndex<DataType, float> {
         VecSimQueryReply *getNextResults(size_t n_res, VecSimQueryReply_Order order) override {
             auto svs_code = VecSim_QueryReply_OK;
 
+            const bool isMulti = this->index->backendIndex->isMultiValue();
             if (svs_iterator == nullptr) { // first call
                 // First call to getNextResults. The call to the BF iterator will include
                 // calculating all the distances and access the BF index. We take the lock on this
@@ -359,12 +377,24 @@ class TieredSVSIndex : public VecSimTieredIndex<DataType, float> {
                 VecSimQueryReply_Free(cur_svs_results);
                 handle_svs_depletion();
             } else {
-                if (flat_results.size() < n_res && !flat_iterator->isDepleted()) {
+                while (flat_results.size() < n_res && !flat_iterator->isDepleted()) {
                     auto tail = flat_iterator->getNextResults(n_res - flat_results.size(),
                                                               BY_SCORE_THEN_ID);
                     flat_results.insert(flat_results.end(), tail->results.begin(),
                                         tail->results.end());
                     VecSimQueryReply_Free(tail);
+
+                    if (!isMulti) {
+                        // On single-value indexes, duplicates will never appear in the hnsw results before
+                        // they appear in the flat results (at the same time or later if the approximation
+                        // misses) so we don't need to try and filter the flat results (and recheck
+                        // conditions).
+                        break;
+                    } else {
+                        // On multi-value indexes, the flat results may contain results that are already
+                        // returned from the svs index. We need to filter them out.
+                        filter_irrelevant_results(this->flat_results);
+                    }
                 }
 
                 while (svs_results.size() < n_res && svs_iterator != depleted() &&
@@ -390,7 +420,12 @@ class TieredSVSIndex : public VecSimTieredIndex<DataType, float> {
             }
 
             VecSimQueryReply *batch;
-            batch = compute_current_batch(n_res);
+            if (isMulti) {
+                batch = compute_current_batch<true>(n_res);
+            }
+            else {
+                batch = compute_current_batch<false>(n_res);
+            }
 
             if (order == BY_ID) {
                 sort_results_by_id(batch);
@@ -592,7 +627,11 @@ public:
         {
             std::scoped_lock lock(this->flatIndexGuard, this->mainIndexGuard, this->journal_mutex);
             ret = this->frontendIndex->addVector(blob, label);
-            ret = std::max(ret - svs_index->deleteVectors(&label, 1), 0);
+
+            if (!this->backendIndex->isMultiValue()) {
+                ret = std::max(ret - svs_index->deleteVectors(&label, 1), 0);
+            }
+
             journal.emplace_back(label, true);
             index_update_needed = this->backendIndex->indexSize() > 0 ||
                                   this->journal.size() >= this->updateJobThreshold;
@@ -668,12 +707,15 @@ public:
             std::shared_lock<decltype(this->flatIndexGuard)> lock(this->flatIndexGuard);
             flat_dist = this->frontendIndex->getDistanceFrom_Unsafe(label, blob);
         }
-        if (!std::isnan(flat_dist)) {
+        if (!this->backendIndex->isMultiValue() && !std::isnan(flat_dist)) {
             return flat_dist;
-        } else {
-            std::shared_lock<decltype(this->mainIndexGuard)> lock(this->mainIndexGuard);
-            return this->backendIndex->getDistanceFrom_Unsafe(label, blob);
         }
+
+        // Multi-value can have the same label with different values
+        // Need to check backend index as well
+        std::shared_lock<decltype(this->mainIndexGuard)> lock(this->mainIndexGuard);
+        auto svs_dist = this->backendIndex->getDistanceFrom_Unsafe(label, blob);
+        return std::fmin(flat_dist, svs_dist);
     }
 
     VecSimIndexDebugInfo debugInfo() const override {
