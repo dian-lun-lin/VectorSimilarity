@@ -17,6 +17,7 @@
 
 #if HAVE_SVS_LVQ
 #include "svs/cpuid.h"
+#include "svs/lib/avx_detection.h"
 #endif
 
 #include <cstdint>
@@ -121,8 +122,9 @@ inline std::pair<VecSimSvsQuantBits, bool> isSVSQuantBitsSupported(VecSimSvsQuan
         // or if the CPU doesn't support it
         // TODO: fallback to scalar quantization
 #if HAVE_SVS_LVQ
-        return svs::detail::intel_enabled() ? std::make_pair(quant_bits, true)
-                                            : std::make_pair(VecSimSvsQuant_NONE, true);
+        return (svs::detail::intel_enabled() && svs::detail::is_avx512_supported())
+                                            ? std::make_pair(quant_bits, true)
+                                            : std::make_pair(VecSimSvsQuant_Scalar, true);
 #else
         return std::make_pair(VecSimSvsQuant_NONE, true);
 #endif
