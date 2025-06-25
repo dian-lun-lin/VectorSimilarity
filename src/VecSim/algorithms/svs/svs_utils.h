@@ -121,7 +121,8 @@ makeVamanaBuildParameters(const SVSParams &params) {
 // Join default SVS search parameters with VecSim query runtime parameters
 inline svs::index::vamana::VamanaSearchParameters
 joinSearchParams(svs::index::vamana::VamanaSearchParameters &&sp,
-                 const VecSimQueryParams *queryParams) {
+                 const VecSimQueryParams *queryParams,
+                 bool is_two_level_lvq) {
     if (queryParams == nullptr) {
         return std::move(sp);
     }
@@ -136,10 +137,12 @@ joinSearchParams(svs::index::vamana::VamanaSearchParameters &&sp,
     }
     else if(rt_params.windowSize > 0 && rt_params.bufferCapacity == 0) {
         sws = rt_params.windowSize;
-        sbc = static_cast<size_t>(rt_params.windowSize * 1.5); /* set window size * 1.5 as default */
-    }
-    else if(rt_params.windowSize == 0 && rt_params.bufferCapacity > 0) {
-        sbc = rt_params.bufferCapacity;
+        if(!is_two_level_lvq) {
+            sbc = rt_params.windowSize; /* set window size as default */
+        }
+        else {
+            sbc = static_cast<size_t>(rt_params.windowSize * 1.5); /* set window size * 1.5 as default for two level LVQ */
+        }
     }
 
     sp.buffer_config({sws, sbc});
