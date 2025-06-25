@@ -70,7 +70,11 @@ protected:
 
     // Index search parameters
     size_t search_window_size;
+    size_t search_window_capacity;
     double epsilon;
+
+    // LeanVec dataset dimension if enabled
+    size_t leanvec_dim;
 
     // SVS thread pool
     VecSimSVSThreadPool threadpool_;
@@ -125,7 +129,7 @@ protected:
 
         // Construct SVS index initial storage with compression if needed
         auto data = storage_traits_t::create_storage(points, this->blockSize, threadpool_handle,
-                                                     this->getAllocator());
+                                                     this->getAllocator(), this->leanvec_dim);
         // Compute the entry point.
         auto entry_point =
             svs::index::vamana::extensions::compute_entry_point(data, threadpool_handle);
@@ -152,7 +156,7 @@ protected:
 
         // Configure default search parameters
         auto sp = impl_->get_search_parameters();
-        sp.buffer_config({this->search_window_size});
+        sp.buffer_config({this->search_window_size, this->search_window_capacity});
         impl_->set_search_parameters(sp);
         impl_->reset_performance_parameters();
     }
@@ -280,7 +284,10 @@ public:
         : Base{abstractInitParams, components}, forcePreprocessing{force_preprocessing},
           changes_num{0}, buildParams{svs_details::makeVamanaBuildParameters(params)},
           search_window_size{svs_details::getOrDefault(params.search_window_size, 10)},
+          // By default, use search_window_size as search_window_capacity during build time
+          search_window_capacity{svs_details::getOrDefault(params.search_window_capacity, search_window_size)},
           epsilon{svs_details::getOrDefault(params.epsilon, 0.01)},
+          leanvec_dim{svs_details::getOrDefault(params.leanvec_dim, 0)},
           threadpool_{std::max(size_t{1}, params.num_threads)}, impl_{nullptr} {}
 
     ~SVSIndex() = default;

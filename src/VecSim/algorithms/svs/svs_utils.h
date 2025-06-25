@@ -128,8 +128,15 @@ joinSearchParams(svs::index::vamana::VamanaSearchParameters &&sp,
 
     auto &rt_params = queryParams->svsRuntimeParams;
     if (rt_params.windowSize > 0) {
-        sp.buffer_config({rt_params.windowSize});
+        if(rt_params.windowCapacity > 0) {
+            sp.buffer_config({rt_params.windowSize, rt_params.windowCapacity});
+        }
+        else {
+            // By default, we use window size * 1.5 for window capacity
+            sp.buffer_config({rt_params.windowSize, static_cast<size_t>(rt_params.windowSize * 1.5)});
+        }
     }
+
     switch (rt_params.searchHistory) {
     case VecSimOption_ENABLE:
         sp.search_buffer_visited_set(true);
@@ -203,7 +210,7 @@ struct SVSStorageTraits {
 
     template <svs::data::ImmutableMemoryDataset Dataset, svs::threads::ThreadPool Pool>
     static index_storage_type create_storage(const Dataset &data, size_t block_size, Pool &pool,
-                                             std::shared_ptr<VecSimAllocator> allocator) {
+                                             std::shared_ptr<VecSimAllocator> allocator, size_t /*leanvec_dim*/) {
         const auto dim = data.dimensions();
         const auto size = data.size();
         // SVS storage element size and block size can be differ than VecSim
@@ -223,7 +230,7 @@ struct SVSStorageTraits {
     }
 
     // SVS storage element size can be differ than VecSim DataSize
-    static constexpr size_t element_size(size_t dims, size_t /*alignment*/ = 0) {
+    static constexpr size_t element_size(size_t dims, size_t /*alignment*/ = 0, size_t /*leanvec_dim*/ = 0) {
         return dims * sizeof(DataType);
     }
 

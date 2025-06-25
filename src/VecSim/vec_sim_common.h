@@ -160,6 +160,8 @@ typedef struct {
                                          // the entire search history.
     size_t num_threads;                  // Maximum number of threads in threadpool.
     size_t search_window_size;           // Search window size to use during search.
+    size_t search_window_capacity;       // Search window capacity to use during search.
+    size_t leanvec_dim;                  // Leanvec dimension to use when LeanVec is enabled.
     double epsilon; // Epsilon parameter for SVS graph accuracy/latency for range search.
 } SVSParams;
 
@@ -225,6 +227,7 @@ typedef struct {
 
 typedef struct {
     size_t windowSize;              // Search window size for Vamana graph accuracy/latency tune.
+    size_t windowCapacity;           // Search window capacity for Vamana graph accuracy/latency tune.
     VecSimOptionMode searchHistory; // Enabling of the visited set for search.
     double epsilon; // Epsilon parameter for SVS graph accuracy/latency for range search.
 } SVSRuntimeParams;

@@ -56,6 +56,7 @@ public:
     // static const char *HNSW_VISITED_NODES_POOL_SIZE_STRING;
 
     static const char *SVS_WS_SEARCH_STRING;
+    static const char *SVS_WC_SEARCH_STRING;
     static const char *SVS_USE_SEARCH_HISTORY_STRING;
 
     static const char *BLOCK_SIZE_STRING;
