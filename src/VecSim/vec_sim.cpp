@@ -68,21 +68,21 @@ static VecSimResolveCode _ResolveParams_WSSearch(VecSimAlgo index_type, VecSimRa
     return VecSimParamResolver_OK;
 }
 
-static VecSimResolveCode _ResolveParams_WCSearch(VecSimAlgo index_type, VecSimRawParam rparam,
+static VecSimResolveCode _ResolveParams_BCSearch(VecSimAlgo index_type, VecSimRawParam rparam,
                                                  VecSimQueryParams *qparams) {
     long long num_val;
-    // WC_SEARCH is a valid parameter only in SVS algorithm.
+    // BC_SEARCH is a valid parameter only in SVS algorithm.
     if (index_type != VecSimAlgo_SVS) {
         return VecSimParamResolverErr_UnknownParam;
     }
-    if (qparams->svsRuntimeParams.windowCapacity != 0) {
+    if (qparams->svsRuntimeParams.bufferCapacity != 0) {
         return VecSimParamResolverErr_AlreadySet;
     }
     if (validate_positive_integer_param(rparam, &num_val) != VecSimParamResolver_OK) {
         return VecSimParamResolverErr_BadValue;
     }
 
-    qparams->svsRuntimeParams.windowCapacity = (size_t)num_val;
+    qparams->svsRuntimeParams.bufferCapacity = (size_t)num_val;
     return VecSimParamResolver_OK;
 }
 
@@ -249,8 +249,8 @@ extern "C" VecSimResolveCode VecSimIndex_ResolveParams(VecSimIndex *index, VecSi
                 VecSimParamResolver_OK) {
                 return res;
             }
-        } else if (!strcasecmp(rparams[i].name, VecSimCommonStrings::SVS_WC_SEARCH_STRING)) {
-            if ((res = _ResolveParams_WCSearch(index_type, rparams[i], qparams)) !=
+        } else if (!strcasecmp(rparams[i].name, VecSimCommonStrings::SVS_BC_SEARCH_STRING)) {
+            if ((res = _ResolveParams_BCSearch(index_type, rparams[i], qparams)) !=
                 VecSimParamResolver_OK) {
                 return res;
             }
